@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        PYTHONPATH = "${env.WORKSPACE}/helloworld"
+        PYTHONPATH = "${env.WORKSPACE}"
         FLASK_APP = "${env.PYTHONPATH}/app/api.py"
     }
     stages {
@@ -10,6 +10,7 @@ pipeline {
                 sh 'uname -a'
 		echo "WORKSPACE: ${env.WORKSPACE}"
 		echo 'Jenkinsfile descarga código fuente'
+		sh 'ls -la'
             }
         }
         stage('Build') {
