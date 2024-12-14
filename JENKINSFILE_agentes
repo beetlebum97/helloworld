@@ -7,7 +7,7 @@ pipeline {
         stage('Get Code') {
             agent { label 'maestro' }
             environment { 
-                PYTHONPATH = "${env.WORKSPACE}/helloworld" 
+                PYTHONPATH = "${env.WORKSPACE}" 
                 FLASK_APP = "${env.PYTHONPATH}/app/api.py" 
             }
             steps {
@@ -32,7 +32,7 @@ pipeline {
         stage('Tests') {
             agent { label 'esclavo1' }
             environment { 
-                PYTHONPATH = "${env.WORKSPACE}/helloworld" 
+                PYTHONPATH = "${env.WORKSPACE}" 
                 FLASK_APP = "${env.PYTHONPATH}/app/api.py" 
             }
             stages {
@@ -70,7 +70,7 @@ pipeline {
         stage('Results') {
             agent { label 'esclavo2' }
             environment { 
-                PYTHONPATH = "${env.WORKSPACE}/helloworld" 
+                PYTHONPATH = "${env.WORKSPACE}" 
                 FLASK_APP = "${env.PYTHONPATH}/app/api.py" 
             }
             steps {
