@@ -17,12 +17,7 @@ pipeline {
                 '''
                 echo "WORKSPACE: ${env.WORKSPACE}"
                 sh '''
-                    if [ -d "${PYTHONPATH}/.git" ]; then
-                        cd ${PYTHONPATH}
-                        git pull origin master
-                    else
-                        git clone ${GIT_REPO}
-                    fi
+                    echo "Código fuente descargado/actualizado por 'Pipeline script from SCM'"
                     ls -la ${PYTHONPATH}
                 '''
                 stash includes: '**', name: 'source_code'
