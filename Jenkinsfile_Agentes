@@ -1,0 +1,106 @@
+pipeline {
+    agent none
+    environment {
+        URL_REPO = 'https://github.com/beetlebum97/helloworld.git'
+    }
+    stages {
+        stage('Get Code') {
+            agent { label 'maestro' }
+            environment { 
+                PYTHONPATH = "${env.WORKSPACE}" 
+                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+            }
+            steps {
+                sh 'whoami ; hostname ; hostname -I'
+                echo "WORKSPACE: ${env.WORKSPACE}"
+                // Comprobar si el repositorio ya existe
+                sh '''
+                    if [ -d "${PYTHONPATH}/.git" ]; then
+                        git pull origin master
+                    else
+                        git clone ${URL_REPO} .
+                    fi
+                    ls -la ${PYTHONPATH}
+                '''
+                stash includes: '**', name: 'source_code'    // Guardar temporalmente para otros nodos
+            }
+        }
+        stage('Build') {
+            agent { label 'maestro' }
+            steps {
+                echo 'La etapa no hace nada (^_^)'
+            }
+        }
+        stage('Tests') {
+            stages {
+                stage('Parallel Tests') {
+                    parallel {
+                        stage('Unit') {
+                            agent { label 'esclavo1' }
+                            environment { 
+                                PYTHONPATH = "${env.WORKSPACE}" 
+                                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                            }
+                            steps {
+                                unstash 'source_code'
+                                sh 'whoami ; hostname ; hostname -I'
+                                echo "WORKSPACE: ${env.WORKSPACE}"
+                                sh 'pytest --junitxml=result-unit.xml ${PYTHONPATH}/test/unit'
+                                stash includes: 'result-unit.xml', name: 'unit_results'
+                            }
+                        }
+                        stage('Rest') {
+                            agent { label 'esclavo2' }
+                            environment { 
+                                PYTHONPATH = "${env.WORKSPACE}" 
+                                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                            }
+                            steps {
+                                unstash 'source_code'
+                                sh 'whoami ; hostname ; hostname -I'
+                                echo "WORKSPACE: ${env.WORKSPACE}"
+                                sh 'flask run &'
+                                // Confirmar arranque Wiremock antes de los test
+                                sh '''
+                                    java -jar /opt/unir/wiremock-standalone-3.10.0.jar --port 9090 --root-dir ${PYTHONPATH}/test/wiremock &
+                                    while ! nc -z localhost 9090; do
+                                        sleep 2
+                                    done
+                                    '''
+                                sh 'pytest --junitxml=result-rest.xml ${PYTHONPATH}/test/rest/'
+                                stash includes: 'result-rest.xml', name: 'rest_results'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Results') {
+            agent { label 'maestro' }
+            environment { 
+                PYTHONPATH = "${env.WORKSPACE}" 
+                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+            }
+            steps {
+                unstash 'unit_results'
+                unstash 'rest_results'
+                sh 'whoami ; hostname ; hostname -I'
+                echo "WORKSPACE: ${env.WORKSPACE}"
+                junit 'result*.xml'
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                def nodes = ['maestro', 'esclavo1', 'esclavo2']
+                nodes.each { nodeLabel ->
+                    node(nodeLabel) {
+                        echo "Limpiando workspace en el nodo ${nodeLabel}"
+                        cleanWs() // Limpiar workspace
+                    }
+                }        
+            }
+        }
+    }
+}
