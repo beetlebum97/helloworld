@@ -21,7 +21,7 @@ class Calculator:
     def divide(self, x, y):
         self.check_types(x, y)
         if y == 0:
-            raise                                                TypeError("Division by zero is not possible")
+            raise ZeroDivisionError("Division by zero is not possible") # Si el divisor es cero, el servicio debe devolver un error HTTP 406
 
         return x / y
 
