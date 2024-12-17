@@ -38,7 +38,7 @@ class TestApi(unittest.TestCase):
 # NUEVOS
 
     def test_api_multiply(self):
-    	url = f"{BASE_URL_MOCK}/calc/multiply/5/5"
+    	url = f"{BASE_URL}/calc/multiply/5/5"
     	response = urlopen(url, timeout=DEFAULT_TIMEOUT)
     	self.assertEqual(
             response.status, http.client.OK, f"Error en la petición API a {url}"
@@ -48,13 +48,13 @@ class TestApi(unittest.TestCase):
     	)
 
     def test_api_divide(self):
-        url = f"{BASE_URL_MOCK}/calc/divide/20/2"
+        url = f"{BASE_URL}/calc/divide/20/2"
         response = urlopen(url, timeout=DEFAULT_TIMEOUT)
         self.assertEqual(
             response.status, http.client.OK, f"Error en la petición API a {url}"
         )
         self.assertEqual(
-            response.read().decode(), "10", "ERROR DIVIDE"
+            response.read().decode(), "10.0", "ERROR DIVIDE"
         )
 
     def test_api_power(self):
