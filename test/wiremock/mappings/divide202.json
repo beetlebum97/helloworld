@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "/calc/divide/20/2"
+  },
+  "response": {
+    "status": 200,
+    "body": "10",
+    "headers": {
+        "Content-Type": "text/plain",
+        "Access-Control-Allow-Origin": "*"
+    }
+  }
+}

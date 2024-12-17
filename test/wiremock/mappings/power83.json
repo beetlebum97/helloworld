@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "/calc/power/8/3"
+  },
+  "response": {
+    "status": 200,
+    "body": "512",
+    "headers": {
+        "Content-Type": "text/plain",
+        "Access-Control-Allow-Origin": "*"
+    }
+  }
+}

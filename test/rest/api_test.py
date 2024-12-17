@@ -35,19 +35,37 @@ class TestApi(unittest.TestCase):
             response.read().decode(), "8", "ERROR SQRT"
         )
 
-# NUEVO
+# NUEVOS
 
-    def test_api_power(self):
-    	base = 2
-    	exponent = 3
-    	url = f"{BASE_URL_MOCK}/calc/power/2/3"
+    def test_api_multiply(self):
+    	url = f"{BASE_URL_MOCK}/calc/multiply/5/5"
     	response = urlopen(url, timeout=DEFAULT_TIMEOUT)
     	self.assertEqual(
             response.status, http.client.OK, f"Error en la petición API a {url}"
     	)
     	self.assertEqual(
-            response.read().decode(), "8", "ERROR POWER"
+            response.read().decode(), "25", "ERROR MULTIPLY"
     	)
+
+    def test_api_divide(self):
+        url = f"{BASE_URL_MOCK}/calc/divide/20/2"
+        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+        self.assertEqual(
+            response.status, http.client.OK, f"Error en la petición API a {url}"
+        )
+        self.assertEqual(
+            response.read().decode(), "10", "ERROR DIVIDE"
+        )
+
+    def test_api_power(self):
+        url = f"{BASE_URL_MOCK}/calc/power/8/3"
+        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+        self.assertEqual(
+            response.status, http.client.OK, f"Error en la petición API a {url}"
+        )
+        self.assertEqual(
+            response.read().decode(), "512", "ERROR POWER"
+        )
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

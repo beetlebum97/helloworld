@@ -1,11 +1,11 @@
 {
   "request": {
     "method": "GET",
-    "url": "/calc/power/2/3"
+    "url": "/calc/multiply/5/5"
   },
   "response": {
     "status": 200,
-    "body": "8",
+    "body": "25",
     "headers": {
         "Content-Type": "text/plain",
         "Access-Control-Allow-Origin": "*"
