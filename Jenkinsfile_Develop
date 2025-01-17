@@ -1,0 +1,103 @@
+pipeline {
+    agent none
+    stages {
+        stage('Get Code') {
+            agent { label 'maestro' }
+            environment { 
+                PYTHONPATH = "${env.WORKSPACE}" 
+            }
+            steps {
+                sh 'whoami ; hostname ; hostname -I; uname -a'      // Info Sistema
+                git branch: 'develop', url:'https://github.com/beetlebum97/helloworld.git'   // Clonar repo y posicionarse en rama master
+                echo "WORKSPACE: ${env.WORKSPACE}"
+                sh 'git rev-parse --abbrev-ref HEAD'    // Rama actual
+                sh 'ls -la'
+                stash includes: '**', name: 'source_code'    // Guardar temporalmente para otros nodos
+                cleanWs()
+            }
+        }
+        stage('Build') {
+            agent { label 'maestro' }
+            steps {
+                echo 'No hace nada (^_^)'
+            }
+        }
+        stage('Tests') {
+            stages {
+                stage('Parallel Tests') {
+                    parallel {				// Ejecución en paralelo
+                        stage('Unit') {
+                            agent { label 'esclavo1' }
+                            environment { 
+                                PYTHONPATH = "${env.WORKSPACE}" 
+                                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                            }
+                            steps {
+                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {		// Continuar aunque falle la etapa
+                                    unstash 'source_code'
+                                    sh 'whoami ; hostname ; hostname -I; uname -a'
+                                    echo "WORKSPACE: ${env.WORKSPACE}"
+                                    sh 'ls -la'
+                                    sh 'pytest --junitxml=result-unit.xml ${PYTHONPATH}/test/unit'
+                                    stash includes: 'result-unit.xml', name: 'unit_results'
+                                    cleanWs()
+                                }
+                            }
+                        }
+                        stage('Rest') {
+                            agent { label 'esclavo2' }
+                            environment { 
+                                PYTHONPATH = "${env.WORKSPACE}" 
+                                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                            }
+                            steps {
+                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                    unstash 'source_code'
+                                    sh 'whoami ; hostname ; hostname -I; uname -a'
+                                    echo "WORKSPACE: ${env.WORKSPACE}"
+                                    sh 'ls -la'
+                                    sh '''
+                                    n=0
+                                    flask run &
+                                    while ! nc -z localhost 5000; do
+                                        sleep 1
+                                        n=$((n+1))
+                                    done
+                                    echo "Flask arrancó en $n segundos"
+                                    '''
+                                    sh '''
+                                    n=0
+                                    java -jar /opt/unir/wiremock-standalone-3.10.0.jar --port 9090 --root-dir ${PYTHONPATH}/test/wiremock & 
+                                    while ! nc -z localhost 9090; do
+                                        sleep 1
+                                        n=$((n+1))
+                                    done
+                                    echo "Wiremock arrancó en $n segundos"
+                                    '''
+                                    sh 'pytest --junitxml=result-rest.xml ${PYTHONPATH}/test/rest/'
+                                    stash includes: 'result-rest.xml', name: 'rest_results'
+                                    cleanWs()
+                                }
+                            }    
+                        }
+                    }
+                }
+            }
+        }
+        stage('Results') {
+            agent { label 'maestro' }
+            environment { 
+                PYTHONPATH = "${env.WORKSPACE}" 
+            }
+            steps {
+                unstash 'unit_results'
+                unstash 'rest_results'
+                sh 'whoami ; hostname ; hostname -I'
+                echo "WORKSPACE: ${env.WORKSPACE}"
+                sh 'ls -la'
+                junit 'result*.xml'
+                cleanWs()
+            }
+        }
+    }
+}
