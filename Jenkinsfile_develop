@@ -8,7 +8,7 @@ pipeline {
             }
             steps {
                 sh 'whoami ; hostname ; hostname -I; uname -a'      // Info Sistema
-                git branch: 'develop', url:'https://github.com/beetlebum97/helloworld.git'   // Clonar repo y posicionarse en rama master
+                git branch: 'develop', url:'https://github.com/beetlebum97/helloworld.git'   // Clonar repo y posicionarse en rama develop
                 echo "WORKSPACE: ${env.WORKSPACE}"
                 sh 'git rev-parse --abbrev-ref HEAD'    // Rama actual
                 sh 'ls -la'
