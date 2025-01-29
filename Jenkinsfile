@@ -132,7 +132,8 @@ pipeline {
                     // Publicar resultados de cobertura.
                     cobertura coberturaReportFile: 'coverage.xml', 
                     conditionalCoverageTargets: '100,0,80', 
-                    lineCoverageTargets: '100,0,85' 
+                    lineCoverageTargets: '100,0,85',
+                    onlyStable:false
                 }    
             }
         }   
