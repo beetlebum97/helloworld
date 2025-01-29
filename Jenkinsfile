@@ -92,7 +92,7 @@ pipeline {
                     // Registrar los resultados de Bandit y definir quality gates.
                     recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates : [
                         [threshold:2, type: 'TOTAL', unstable: true], 
-                        [threshold: 4, type: 'TOTAL', unstable: false]
+                        [threshold: 4, type: 'TOTAL', unhealthy: true]
                     ]
                 }
             }
