@@ -1,102 +1,192 @@
 pipeline {
     agent none
     stages {
+        // DESCARGA CÓDIGO FUENTE
         stage('Get Code') {
             agent { label 'maestro' }
-            environment { 
-                PYTHONPATH = "${env.WORKSPACE}"  
-            }
             steps {
-                sh 'whoami ; hostname ; hostname -I; uname -a'      // Info Sistema
-                git branch: 'master', url:'https://github.com/beetlebum97/helloworld.git'   // Clonar repo y posicionarse en rama master
+                sh 'whoami ; hostname ; hostname -I; uname -a'      
+                git branch: 'master', url:'https://github.com/beetlebum97/helloworld.git'   
                 echo "WORKSPACE: ${env.WORKSPACE}"
-		sh 'git rev-parse --abbrev-ref HEAD'    // Rama actual
+		sh 'git rev-parse --abbrev-ref HEAD'    
                 sh 'ls -la'
-                stash includes: '**', name: 'source_code'    // Guardar temporalmente para otros nodos
-                cleanWs()
-            }
-        }
-        stage('Build') {
-            agent { label 'maestro' }
-            steps {
-                echo 'No hace nada (^_^)'
+                stash includes: '**', name: 'source_code'    
             }
         }
         stage('Tests') {
-            stages {
-                stage('Parallel Tests') {
-                    parallel {				// Ejecución en paralelo
-                        stage('Unit') {
-                            agent { label 'esclavo1' }
-                            environment { 
-                                PYTHONPATH = "${env.WORKSPACE}" 
-                                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
-                            }
-                            steps {
-                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {		// Continuar aunque falle la etapa
-                                    unstash 'source_code'
-                                    sh 'whoami ; hostname ; hostname -I; uname -a'
-                                    echo "WORKSPACE: ${env.WORKSPACE}"
-                                    sh 'ls -la'
-                                    sh 'pytest --junitxml=result-unit.xml ${PYTHONPATH}/test/unit'      
-                                    stash includes: 'result-unit.xml', name: 'unit_results'
-                                    cleanWs()
-                                }
-                            }
+            parallel {
+                // PRUEBAS UNITARIAS
+                stage('Unit') {
+                    agent { label 'esclavo1' }
+                    environment { 
+                        PYTHONPATH = "${env.WORKSPACE}" 
+                        FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                    }
+                    steps {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {	
+                            unstash 'source_code'
+                            sh 'whoami ; hostname ; hostname -I; uname -a'
+                            echo "WORKSPACE: ${env.WORKSPACE}"
+
+                            // Ejecutar las pruebas unitarias y generar los datos de cobertura.
+                            sh 'pytest --junitxml=result-unit.xml --cov=app --cov-branch --cov-report=xml:coverage.xml --cov-config=/opt/unir/.coveragerc --cov-report=term-missing test/unit'
+                                    
+                            // Publicar los resultados de las pruebas unitarias.
+                            junit 'result-unit.xml'
+                                    
+                            // Guardar datos de cobertura.
+                            stash name: 'test-coverage', includes: 'coverage.xml'
                         }
-                        stage('Rest') {
-                            agent { label 'esclavo2' }
-                            environment { 
-                                PYTHONPATH = "${env.WORKSPACE}" 
-                                FLASK_APP = "${env.WORKSPACE}/app/api.py" 
-                            }
-                            steps {
-                                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                    unstash 'source_code'
-                                    sh 'whoami ; hostname ; hostname -I; uname -a'
-                                    echo "WORKSPACE: ${env.WORKSPACE}"
-                                    sh 'ls -la'
-                                    sh '''
-                                    n=0
-                                    flask run &
-                                    while ! nc -z localhost 5000; do
-                                        sleep 1
-                                        n=$((n+1))
-                                    done
-                                    echo "Flask arrancó en $n segundos"
-                                    '''
-                                    sh '''
-                                    n=0
-                                    java -jar /opt/unir/wiremock-standalone-3.10.0.jar --port 9090 --root-dir ${PYTHONPATH}/test/wiremock & 
-                                    while ! nc -z localhost 9090; do
-                                        sleep 1
-                                        n=$((n+1))
-                                    done
-                                    echo "Wiremock arrancó en $n segundos"
-                                    '''
-                                    sh 'pytest --junitxml=result-rest.xml ${PYTHONPATH}/test/rest/'
-                                    stash includes: 'result-rest.xml', name: 'rest_results'
-                                    cleanWs()
-                                }
-                            }    
+                    }
+                }
+                // PRUEBAS DE INTEGRACIÓN
+                stage('Rest') {
+                    agent { label 'esclavo2' }
+                    environment { 
+                        PYTHONPATH = "${env.WORKSPACE}" 
+                        FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                    }
+                    steps {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            unstash 'source_code'
+                            sh 'whoami ; hostname ; hostname -I; uname -a'
+                            echo "WORKSPACE: ${env.WORKSPACE}"
+                            
+                            // Lanzar Flask y Wiremock.
+                            sh '''
+                                n=0
+                                flask run &
+                                FLASK_PID=$!
+                                while ! nc -z localhost 5000; do
+                                    sleep 1
+                                    n=$((n+1))
+                                done
+                                echo "Flask arrancó en $n segundos"
+                                n=0
+                                java -jar /opt/unir/wiremock-standalone-3.10.0.jar --port 9090 --root-dir test/wiremock &
+                                WIREMOCK_PID=$!
+                                while ! nc -z localhost 9090; do
+                                    sleep 1
+                                    n=$((n+1))
+                                done
+                                echo "Wiremock arrancó en $n segundos"
+                                pytest --junitxml=result-rest.xml test/rest/
+                                kill -9 $FLASK_PID
+                                kill -9 $WIREMOCK_PID
+                            '''
+                            
+                            // Publicar resultados de las pruebas de integración.
+                            junit 'result-rest.xml'
+                        }
+                    }    
+                }
+                // ANÁLISIS ESTÁTICO DEL CÓDIGO (FLAKE8)
+                stage('Static') {
+                    agent { label 'esclavo1' }
+                    environment { 
+                        PYTHONPATH = "${env.WORKSPACE}" 
+                        FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                    }
+                    steps {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {          
+                            unstash 'source_code'
+                            sh 'whoami ; hostname ; hostname -I'
+                            echo "WORKSPACE: ${env.WORKSPACE}"
+                            
+                            // Registrar los resultados de Flake8 y definir quality gates (umbrales de error).
+                            sh 'flake8 --format=pylint --exit-zero app > flake8.out'
+                            recordIssues tools: [flake8(name: 'Flake8', pattern: 'flake8.out')], qualityGates : [
+                                [threshold:8, type: 'TOTAL', unstable: true], 
+                                [threshold: 10, type: 'TOTAL', unhealthy: true]
+                            ]
+                        }
+                    }
+                }
+                // ANÁLISIS DE SEGURIDAD (BANDIT)
+                stage('Security') {
+                    agent { label 'esclavo2' }
+                    environment { 
+                        PYTHONPATH = "${env.WORKSPACE}" 
+                        FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                    }
+                    steps {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {         
+                            unstash 'source_code'
+                            sh 'whoami ; hostname ; hostname -I'
+                            echo "WORKSPACE: ${env.WORKSPACE}"
+                            
+                            // Ejecutar Bandit para análisis de seguridad.
+                            sh 'bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"'
+                            
+                            // Registrar los resultados de Bandit y definir quality gates.
+                            recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates : [
+                                [threshold:2, type: 'TOTAL', unstable: true], 
+                                [threshold: 4, type: 'TOTAL', unhealthy: true]
+                            ]
+                        }
+                    }
+                }
+                // PRUEBAS DE RENDIMIENTO
+                stage('Performance') {
+                    agent { label 'maestro' }
+                    environment { 
+                        PYTHONPATH = "${env.WORKSPACE}" 
+                        FLASK_APP = "${env.WORKSPACE}/app/api.py" 
+                    }
+                    steps {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {          
+                            unstash 'source_code'
+                            sh 'whoami ; hostname ; hostname -I'
+                            echo "WORKSPACE: ${env.WORKSPACE}"
+                            
+                            // Lanzar Flask y ejecutar jmeter.
+                            sh '''
+                                n=0
+                                flask run &
+                                FLASK_PID=$!
+                                while ! nc -z localhost 5000; do
+                                    sleep 1
+                                    n=$((n+1))
+                                done
+                                echo "Flask arrancó en $n segundos"
+                                /opt/unir/apache-jmeter-5.6.3/bin/jmeter -n -t test/jmeter/flask.jmx -f -l flask.jtl
+                                kill -9 $FLASK_PID
+                            '''
+                            // Generar el informe de rendimiento a partir del archivo JTL de JMeter.
+                            perfReport sourceDataFiles: 'flask.jtl'
                         }
                     }
                 }
             }
         }
-        stage('Results') {
+        // PRUEBAS DE COBERTURA
+        stage('Coverage') {
             agent { label 'maestro' }
-            environment { 
-                PYTHONPATH = "${env.WORKSPACE}"  
-            }
             steps {
-                unstash 'unit_results'
-                unstash 'rest_results'
+                // Recuperar el archivo de cobertura.
+                unstash 'source_code'
+                unstash 'test-coverage'
                 sh 'whoami ; hostname ; hostname -I'
                 echo "WORKSPACE: ${env.WORKSPACE}"
-                sh 'ls -la'
-                junit 'result*.xml'
-                cleanWs()
+                
+                // Publicar resultados de cobertura.
+                cobertura coberturaReportFile: 'coverage.xml', 
+                conditionalCoverageTargets: '100,0,80', 
+                lineCoverageTargets: '100,0,85', 
+                onlyStable: false
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                def nodes = ['maestro', 'esclavo1', 'esclavo2']
+                nodes.each { nodeLabel ->
+                    node(nodeLabel) {
+                        echo "Limpiando workspace en el nodo ${nodeLabel}"
+                        cleanWs() 
+                    }
+                }        
             }
         }
     }
