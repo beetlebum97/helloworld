@@ -1,0 +1,58 @@
+pipeline {
+    agent { label 'maestro'
+    }
+    environment {
+        PYTHONPATH = "${env.WORKSPACE}"
+        FLASK_APP = "${env.WORKSPACE}/app/api.py"
+    }
+    // DESCARGA CÓDIGO FUENTE
+    stages {
+        stage('Get Code') {
+            steps {
+                sh 'whoami ; hostname ; hostname -I; uname -a'
+                git branch: 'feature_fix_coverage', url:'https://github.com/beetlebum97/helloworld.git'
+                echo "WORKSPACE: ${env.WORKSPACE}"
+                sh 'git rev-parse --abbrev-ref HEAD'
+                sh 'ls -la'
+            }
+        }
+        // PRUEBAS UNITARIAS
+        stage('Unit') {
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+
+                    // Ejecutar las pruebas unitarias y generar resultados y datos de cobertura.
+                    sh 'pytest --junitxml=result-unit.xml --cov=app --cov-branch --cov-report=xml:coverage.xml --cov-config=/opt/unir/.coveragerc --cov-report=term-missing test/unit'
+
+                    // Publicar los resultados de las pruebas unitarias.
+                    junit 'result-unit.xml'
+
+                    // Guardar datos de cobertura.
+                    stash name: 'test-coverage', includes: 'coverage.xml'
+                }
+            }
+        }
+        // PRUEBAS DE COBERTURA
+        stage('Coverage') {
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+
+                    // Recuperar el archivo de cobertura.
+                    unstash 'test-coverage'
+
+                    // Publicar resultados de cobertura.
+                    cobertura coberturaReportFile: 'coverage.xml',
+                    conditionalCoverageTargets: '100,0,80',
+                    lineCoverageTargets: '100,0,85',
+                    onlyStable:false
+                }
+            }
+        }
+    }
+    // LIMPIAR WORKSPACE
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
