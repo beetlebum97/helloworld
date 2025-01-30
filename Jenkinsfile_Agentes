@@ -82,7 +82,7 @@ pipeline {
                 }
                 // ANÁLISIS ESTÁTICO DEL CÓDIGO (FLAKE8)
                 stage('Static') {
-                    agent { label 'esclavo1' }
+                    agent { label 'esclavo2' }
                     environment { 
                         PYTHONPATH = "${env.WORKSPACE}" 
                         FLASK_APP = "${env.WORKSPACE}/app/api.py" 
@@ -104,7 +104,7 @@ pipeline {
                 }
                 // ANÁLISIS DE SEGURIDAD (BANDIT)
                 stage('Security') {
-                    agent { label 'esclavo2' }
+                    agent { label 'esclavo1' }
                     environment { 
                         PYTHONPATH = "${env.WORKSPACE}" 
                         FLASK_APP = "${env.WORKSPACE}/app/api.py" 
